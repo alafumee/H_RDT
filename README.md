@@ -237,18 +237,3 @@ h_rdt/
 ├── pretrain.sh              # Human pre-training script
 └── finetune.sh              # Robot fine-tuning script
 ```
-
-## 🎯 Key Results
-
-- **Simulation**: Achieves 68.7% success rate on RoboTwin 2.0 (vs 64.9% for Pi-0)
-- **Multi-task**: 87.2% success on 45-task multi-task evaluation (vs 48.4% for Pi-0)  
-- **Few-shot**: 41.6% success on real-world few-shot tasks with 1-5 demonstrations
-- **Cross-embodiment**: Consistent improvements across Aloha-Agilex, Franka-Panda, ARX5, UR5+UMI platforms
-
-## 📝 Notes
-
-- **Core Innovation**: Human manipulation data provides powerful behavioral priors for robot learning
-- **Human Pre-training**: Based on EgoDx dataset (829 hours, 338K episodes) with automated preprocessing
-- **Cross-Embodiment**: Modular design enables transfer to diverse robot morphologies
-- **Flow Matching**: More stable than traditional diffusion training
-- **Real-world Validation**: Extensive experiments across multiple robot platforms
