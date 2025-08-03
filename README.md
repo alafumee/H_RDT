@@ -2,41 +2,6 @@
 
 H-RDT (**H**uman to **R**obotics **D**iffusion **T**ransformer) is a novel approach that leverages **large-scale egocentric human manipulation data** to enhance robot manipulation capabilities. Our key insight is that large-scale egocentric human manipulation videos with paired 3D hand pose annotations provide rich behavioral priors that capture natural manipulation strategies and can benefit robotic policy learning.
 
-## ✨ Key Features
-
-- **Human Data Pre-training**: Pre-trains on 829 hours of EgoDx egocentric human manipulation videos (338K episodes)
-- **Cross-Embodiment Transfer**: Modular architecture enables effective knowledge transfer from human demonstrations to diverse robotic platforms
-- **Flow Matching Training**: Uses flow matching for stable and efficient policy learning instead of traditional diffusion
-- **48-Dimensional Action Space**: Unified 48D hand pose representation bridges human and robot embodiments
-- **Two-Stage Training**: (1) Pre-train on large-scale human data, (2) Cross-embodiment fine-tuning on robot-specific data
-
-## 🎯 Core Innovation
-
-H-RDT addresses the fundamental challenge of **data scarcity** in robotic manipulation by:
-
-1. **Leveraging Human Behavioral Priors**: Uses the vast repository of human manipulation videos with 3D hand pose annotations from EgoDx dataset
-2. **Cross-Embodiment Knowledge Transfer**: Modular transformer architecture with specialized action encoders/decoders that enable effective transfer from human demonstrations to diverse robot platforms  
-3. **Unified Action Representation**: 48-dimensional hand pose encoding captures essential bimanual manipulation information transferable across embodiments
-
-## 🏗️ Method Overview
-
-### 48-Dimensional Human Hand Action Representation
-- **Bilateral wrist poses**: Position (3D) + orientation (6D) for both hands = 18 dimensions
-- **Fingertip positions**: 3D coordinates for all fingers on both hands = 30 dimensions  
-- **Total**: 48 dimensions capturing essential bimanual dexterous manipulation information
-
-### Two-Stage Training Paradigm
-
-**Stage 1: Human Data Pre-training**
-- Train on complete EgoDx dataset (338K+ trajectories, 194 manipulation tasks)
-- Learn general manipulation priors from human demonstrations
-- Develop robust action representations for dexterous bimanual manipulation
-
-**Stage 2: Cross-Embodiment Fine-tuning**  
-- Transfer vision encoder, language encoder, and transformer backbone weights
-- Re-initialize action adapters for target robot action space (e.g., 14D for dual 7-DOF arms)
-- Preserve learned manipulation semantics while adapting to robot morphologies
-
 ## 🚀 Installation
 
 1. **Create conda environment:**
@@ -203,37 +168,3 @@ elif self.dataset_name == "your_robot_name":
 - `configs/hrdt_finetune.yaml`: Robot fine-tuning configuration  
 - `datasets/dataset.py`: Dataset selection and initialization
 - Modify `state_dim`, `action_dim`, `output_size` for your robot
-
-### Path Support
-✅ **Relative paths supported**: `./checkpoints/pretrain-0618/checkpoint-500000/pytorch_model.bin`  
-✅ **Absolute paths supported**: `/full/path/to/checkpoint/pytorch_model.bin`
-
-## 📊 Model Architecture
-
-H-RDT consists of:
-- **Vision Encoder**: DinoV2 + SigLIP-based image feature extraction
-- **Language Encoder**: T5-XXL-based instruction encoding  
-- **Modular Action Encoder**: Handles 48D human poses (pre-train) and robot actions (fine-tune)
-- **Transformer Backbone**: 16-layer transformer with self-attention and cross-attention (~2B parameters)
-- **Modular Action Decoder**: Outputs action sequences using flow matching
-- **Flow Matching**: Replaces traditional diffusion for stable and efficient training
-
-## 🛠️ Project Structure
-
-```
-h_rdt/
-├── models/
-│   ├── rdt_runner.py          # Main model implementation  
-│   └── encoder/               # Vision and language encoders
-├── train/
-│   ├── train.py              # Training script
-│   └── sample.py             # Sampling/evaluation
-├── configs/
-│   ├── hrdt_pretrain.yaml    # Human pre-training config
-│   └── hrdt_finetune.yaml    # Robot fine-tuning config
-├── datasets/
-│   ├── pretrain/             # EgoDx human data processing
-│   └── robotwin2/            # Robot data processing
-├── pretrain.sh              # Human pre-training script
-└── finetune.sh              # Robot fine-tuning script
-```
