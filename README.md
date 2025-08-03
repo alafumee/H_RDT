@@ -53,7 +53,7 @@ H-RDT addresses the fundamental challenge of **data scarcity** in robotic manipu
 3. **Download pre-trained models:**
    ```bash
    export HF_ENDPOINT=https://hf-mirror.com
-   huggingface-cli download --resume-download hongzhe2002/H-RDT --local-dir ./
+   huggingface-cli download --resume-download embodiedfoundation/H-RDT --local-dir ./
    ```
 
 ## 🔧 Usage
