@@ -95,7 +95,7 @@ Before fine-tuning, preprocess the robot dataset:
    ./datasets/robotwin2/run_robotwin2_pipeline.sh
    ```
 
-**3. Robot Fine-tuning (load human pre-trained backbone):**
+#### Robot Fine-tuning (load human pre-trained backbone):
 1. Configure dataset:
    ```python
    # Edit datasets/dataset.py line ~45
@@ -110,7 +110,7 @@ Before fine-tuning, preprocess the robot dataset:
    bash finetune.sh  # Already configured with pretrained_backbone_path
    ```
 
-**4. Finetune Resume:**
+#### Finetune Resume:
 Edit your current finetune script, make these changes:
 ```bash
 # Change this line:
