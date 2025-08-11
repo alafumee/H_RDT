@@ -1,12 +1,9 @@
 # Customized files
-assets/
 output/
 wandb/
 log/
 *.out
 visualize/
-*.png
-*.jpg
 scripts/debug
 kb_*
 workdir

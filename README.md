@@ -1,7 +1,7 @@
 # H-RDT: Human Manipulation Enhanced Bimanual Robotic Manipulation
 ### 📝[Paper](https://arxiv.org/abs/2507.23523) | 🌍[Project Page](https://embodiedfoundation.github.io/hrdt) | 🤗[Model](https://huggingface.co/embodiedfoundation/H-RDT) 
 
-![H-RDT](assets/.jpg)
+![H-RDT](assets/h-rdt.jpg)
 
 ## 📰 News
 • **[2025.8.12]** Updated RoboTwin2 inference code
