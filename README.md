@@ -1,8 +1,10 @@
 # H-RDT: Human Manipulation Enhanced Bimanual Robotic Manipulation
 ### 📝[Paper](https://arxiv.org/abs/2507.23523) | 🌍[Project Page](https://embodiedfoundation.github.io/hrdt) | 🤗[Model](https://huggingface.co/embodiedfoundation/H-RDT) 
 
-## 📋 Updates
-- **2025.8.12**: Updated RoboTwin2 inference code
+![H-RDT](assets/.jpg)
+
+## 📰 News
+• **[2025.8.12]** Updated RoboTwin2 inference code
 
 H-RDT (**H**uman to **R**obotics **D**iffusion **T**ransformer) is a novel approach that leverages **large-scale egocentric human manipulation data** to enhance robot manipulation capabilities. Our key insight is that large-scale egocentric human manipulation videos with paired 3D hand pose annotations provide rich behavioral priors that capture natural manipulation strategies and can benefit robotic policy learning.
 
@@ -95,7 +97,7 @@ Before fine-tuning, preprocess the robot dataset:
 
 3. **Run data processing pipeline:**
    ```bash
-   # Automatically runs: calc_stat.py → encode_lang_batch.py
+   # Automatically runs: encode_lang_batch.py
    ./datasets/robotwin2/run_robotwin2_pipeline.sh
    ```
 

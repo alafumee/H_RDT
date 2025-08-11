@@ -34,6 +34,7 @@ class MyModel:
             self.config = yaml.safe_load(config_file)
 
         # Load action normalization stats
+        # Note: In H-RDT practice, we do not perform action normalization
         stat_file_path = os.path.join(current_folder_path, 'utils', 'stats.json')
         with open(stat_file_path, 'r') as file:
             stat = json.load(file)

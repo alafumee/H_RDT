@@ -19,16 +19,16 @@ echo "Starting RobotWin2 data processing pipeline..."
 echo "Data Root: $ROBOTWIN2_DATA_ROOT"
 echo "Output Dir: $HRDT_OUTPUT_DIR"
 
-# Step 1: Calculate dataset statistics
-echo "Step 1: Calculating dataset statistics..."
-python datasets/robotwin2/calc_stat.py \
-    --root_dir "$ROBOTWIN2_DATA_ROOT" \
-    --output_path "$STATS_OUTPUT_PATH" \
-    --outlier_path "$OUTLIER_OUTPUT_PATH" \
-    --num_processes "$NUM_PROCESSES"
+# Step 1: Calculate dataset statistics (Optional)
+# echo "Step 1: Calculating dataset statistics..."
+# python datasets/robotwin2/calc_stat.py \
+#     --root_dir "$ROBOTWIN2_DATA_ROOT" \
+#     --output_path "$STATS_OUTPUT_PATH" \
+#     --outlier_path "$OUTLIER_OUTPUT_PATH" \
+#     --num_processes "$NUM_PROCESSES"
 
 # Step 2: Encode language embeddings
-echo "Step 2: Encoding language embeddings..."
+echo "Step 1: Encoding language embeddings..."
 python datasets/robotwin2/encode_lang_batch.py
 
 echo "RobotWin2 pipeline completed!"

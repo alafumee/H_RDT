@@ -19,11 +19,6 @@ cp H-RDT/checkpoints/*/config.json /path/to/RoboTwin/policy/H-RDT/checkpoints/fo
 cp H-RDT/checkpoints/*/pytorch_model.bin /path/to/RoboTwin/policy/H-RDT/checkpoints/folder_name/
 ```
 
-4. Replace stats.json with your own dataset stats
-```bash
-cp your_dataset_stats.json /path/to/RoboTwin/policy/H-RDT/utils/stats.json
-```
-
 ## Run Inference
 
 1. Modify eval.sh configuration
