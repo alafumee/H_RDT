@@ -78,27 +78,19 @@ Edit `pretrain.sh`, add this line:
 ### Stage 2: Cross-Embodiment Fine-tuning
 
 #### Data Preprocessing (for RobotWin2)
-Before fine-tuning, preprocess the robot dataset:
+**Pre-computed language embeddings are already provided - no preprocessing needed!**
 
-1. **Configure paths:**
+1. **Setup environment:**
    ```bash
-   # Edit datasets/robotwin2/setup_robotwin2.sh with your paths
-   nano datasets/robotwin2/setup_robotwin2.sh
-   
-   # Set your RobotWin2 dataset and T5 model paths:
-   export ROBOTWIN2_DATA_ROOT="/path/to/your/robotwin2/dataset"
-   export T5_MODEL_PATH="/path/to/your/t5-v1_1-xxl"
-   ```
-
-2. **Setup environment:**
-   ```bash
+   # Edit datasets/robotwin2/setup_robotwin2.sh if needed (only for regenerating files)
    source datasets/robotwin2/setup_robotwin2.sh
    ```
 
-3. **Run data processing pipeline:**
+2. **Data processing pipeline (Not Required):**
    ```bash
-   # Automatically runs: encode_lang_batch.py
-   ./datasets/robotwin2/run_robotwin2_pipeline.sh
+   # Not needed - lang_embeddings/ already provided in repository
+   # Only run if you want to regenerate files:
+   # ./datasets/robotwin2/run_robotwin2_pipeline.sh
    ```
 
 #### Robot Fine-tuning (load human pre-trained backbone):
