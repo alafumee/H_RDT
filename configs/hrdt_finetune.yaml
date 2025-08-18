@@ -6,7 +6,7 @@ common:
   # The number of future actions to predict
   action_chunk_size: 16
   # The number of cameras to be used in the model
-  num_cameras: 1
+  num_cameras: 3
   # Dimension for state
   state_dim: 14
   # Dimension for action
