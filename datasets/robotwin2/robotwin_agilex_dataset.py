@@ -43,7 +43,6 @@ class RobotwinAgilexDataset:
         stat_path=None,
         upsample_rate=3,
         val=False,
-        image_aug=False,
         image_corrupt_severity=5
     ):
         """
@@ -60,7 +59,6 @@ class RobotwinAgilexDataset:
             stat_path: Path to normalization statistics file
             upsample_rate: Temporal data upsampling rate
             val: Whether this is validation set
-            image_aug: Whether to apply image augmentation
             image_corrupt_severity: Image corruption severity level
         """
         self.DATASET_NAME = "robotwin_agilex"
@@ -72,7 +70,6 @@ class RobotwinAgilexDataset:
         self.max_episodes = max_episodes
         self.upsample_rate = upsample_rate
         self.val = val
-        self.image_aug = image_aug
         self.image_corrupt_severity = image_corrupt_severity
         
         # Validate mode-specific parameters
@@ -280,7 +277,7 @@ class RobotwinAgilexDataset:
 
     def load_language_embedding(self, hdf5_file_path):
         """
-        Load pre-encoded language instruction embedding from task-level instruction file
+        Load pre-encoded language instruction embedding from centralized lang_embeddings folder
         
         Args:
             hdf5_file_path (str): Path to HDF5 episode file
@@ -290,24 +287,30 @@ class RobotwinAgilexDataset:
         """
         try:
             # Extract task name from HDF5 file path
-            # Example: HDF5 file: /share/hongzhe/datasets/robotwin2/dataset/aloha-agilex/adjust_bottle/demo_clean/data/episode0.hdf5
-            # Instruction file: /share/hongzhe/datasets/robotwin2/dataset/aloha-agilex/adjust_bottle/adjust_bottle.pt
+            # Example: HDF5 file: /path/to/dataset/adjust_bottle/demo_clean/data/episode0.hdf5
+            # Embedding file: /path/to/H_RDT/datasets/robotwin2/lang_embeddings/adjust_bottle.pt
             # -> task_name = "adjust_bottle"
             
-            # Find task name by locating multi_task_root_dir in the path
             task_name = None
-            if self.multi_task_root_dir in hdf5_file_path:
-                # Get relative path from multi_task_root_dir
-                relative_path = os.path.relpath(hdf5_file_path, self.multi_task_root_dir)
-                # Task name is the first directory in relative path
-                task_name = relative_path.split(os.sep)[0]
+            
+            if self.mode == "single_task":
+                # For single task mode, use the provided task_name
+                task_name = self.task_name
+            else:
+                # For multi-task mode, extract task name from file path
+                if self.multi_task_root_dir and self.multi_task_root_dir in hdf5_file_path:
+                    # Get relative path from multi_task_root_dir
+                    relative_path = os.path.relpath(hdf5_file_path, self.multi_task_root_dir)
+                    # Task name is the first directory in relative path
+                    task_name = relative_path.split(os.sep)[0]
             
             if task_name is None:
                 print(f"Warning: Could not extract task name from path {hdf5_file_path}")
                 return None
             
-            # Build task instruction file path: /multi_task_root_dir/task_name/task_name.pt
-            embedding_path = os.path.join(self.multi_task_root_dir, task_name, f"{task_name}.pt")
+            # Build embedding file path using relative path to current script location
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            embedding_path = os.path.join(current_dir, 'lang_embeddings', f"{task_name}.pt")
             
             if not os.path.exists(embedding_path):
                 print(f"Warning: Task embedding file not found: {embedding_path}")
@@ -327,7 +330,7 @@ class RobotwinAgilexDataset:
             if embeddings.dim() == 3:
                 embeddings = embeddings.squeeze(0)
             
-            # print(f"[DEBUG] Loaded task instruction for '{task_name}'")
+            # print(f"[DEBUG] Loaded task instruction for '{task_name}' from {embedding_path}")
             return embeddings
             
         except Exception as e:
@@ -453,22 +456,7 @@ class RobotwinAgilexDataset:
                     
                     camera_data = f[camera_path]
                     img_frames = self.parse_img_data(camera_data, index)
-                    
-                    # Apply image augmentation if enabled
-                    if self.image_aug and not self.val:
-                        aug_img_frames = []
-                        for h in range(self.img_history_size):
-                            img = img_frames[h]  # Get RGB image
-                            
-                            # Apply background augmentation to entire image
-                            processed_img = self.process_background_with_imgaug(img)
-                            aug_img_frames.append(processed_img)
-                        
-                        # Use augmented images
-                        final_images = np.array([aug_img_frames])  # Shape: [1, history_size, H, W, 3]
-                    else:
-                        # Use original images without augmentation
-                        final_images = np.array([img_frames])  # Shape: [1, history_size, H, W, 3]
+                    img_frames_np = np.array([img_frames])  # Shape: [1, history_size, H, W, 3]
                     
                     # Create image mask
                     mask_length = self.img_history_size
@@ -490,7 +478,7 @@ class RobotwinAgilexDataset:
                 
                 # Create result dictionary
                 result = {
-                    "current_images": final_images,  # Current frame images (possibly augmented)
+                    "current_images": img_frames_np,  # Current frame images (possibly augmented)
                     "current_images_mask": current_images_mask,  # Image masks
                     "actions": action_chunk,  # Action sequence
                     "states": np.expand_dims(action_current, axis=0),  # States
@@ -499,10 +487,6 @@ class RobotwinAgilexDataset:
                     "instruction": language_embedding,  # Pre-encoded language instruction
                     "dataset_name": self.DATASET_NAME,  # Dataset name
                 }
-                
-                # If image augmentation was applied, save original images for debugging
-                if self.image_aug:
-                    result["original_images"] = np.array([img_frames])
                 
                 return result
 
