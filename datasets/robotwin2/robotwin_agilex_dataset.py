@@ -86,6 +86,19 @@ class RobotwinAgilexDataset:
         self.state_dim = config['common']['action_dim']
         self.img_history_size = config['common']['img_history_size']
         
+        # Set camera parameters for multi-view (3 cameras only)
+        self.num_cameras = config['common']['num_cameras']
+        if self.num_cameras == 3:
+            self.cameras = ["cam_high", "cam_right_wrist", "cam_left_wrist"]
+        else:
+            raise ValueError(f"Unsupported num_cameras={self.num_cameras}, only 3 cameras supported.")
+
+        self.camera_mapping = {
+            "cam_high": "head_camera", 
+            "cam_left_wrist": "left_camera",
+            "cam_right_wrist": "right_camera"
+        }
+        
         # Set default stat_path if not provided (relative to this file)
         if stat_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -207,10 +220,10 @@ class RobotwinAgilexDataset:
 
     def parse_img_data(self, dataset, idx):
         """
-        Process stitched camera image data from observation/camera/rgb
+        Process single camera image data from individual camera paths
         
         Args:
-            dataset: HDF5 dataset containing stitched camera images
+            dataset: HDF5 dataset containing single camera images
             idx: Current frame index
             
         Returns:
@@ -219,8 +232,8 @@ class RobotwinAgilexDataset:
         start_i = max(idx - self.img_history_size * self.upsample_rate + 1, 0)
         num_frames = (idx - start_i) // self.upsample_rate + 1
 
-        # Use original resolution for stitched images
-        frames = np.zeros((num_frames, 360, 320, 3), dtype=np.uint8)  # Stitched size: 320x360
+        # Use standard resolution for individual camera images
+        frames = np.zeros((num_frames, 240, 320, 3), dtype=np.uint8)  # Standard size: 320x240
         
         try:
             for i, frame_idx in enumerate(range(start_i, idx + 1, self.upsample_rate)):
@@ -251,7 +264,7 @@ class RobotwinAgilexDataset:
             img_data (bytes): Binary image data
         
         Returns:
-            np.ndarray: Decoded image array, shape=(360, 320, 3), RGB format
+            np.ndarray: Decoded image array, shape=(240, 320, 3), RGB format
         """
         try:
             # Decode using OpenCV
@@ -265,9 +278,9 @@ class RobotwinAgilexDataset:
             # OpenCV uses BGR format by default, convert to RGB
             rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
             
-            # Resize to expected stitched size if needed (320x360)
-            if rgb_img.shape[:2] != (360, 320):
-                rgb_img = cv2.resize(rgb_img, (320, 360))
+            # Resize to expected standard size if needed (320x240)
+            if rgb_img.shape[:2] != (240, 320):
+                rgb_img = cv2.resize(rgb_img, (320, 240))
                 
             return rgb_img
             
@@ -337,63 +350,6 @@ class RobotwinAgilexDataset:
             print(f"Error loading language embedding from {hdf5_file_path}: {e}")
             return None
 
-    def process_background_with_imgaug(self, image):
-        """
-        Apply background augmentation to the entire image using imgaug
-        
-        Args:
-            image (np.ndarray): Input RGB image, shape (H, W, 3)
-            
-        Returns:
-            np.ndarray: Augmented RGB image, shape (H, W, 3)
-        """
-        # Build imgaug augmentation sequence
-        # 1. Noise augmenters
-        noise_augs = iaa.OneOf([
-            # Basic noise
-            iaa.AdditiveGaussianNoise(scale=(10, 60)),          # Gaussian noise
-            iaa.AdditivePoissonNoise(lam=(15, 30)),             # Poisson noise
-            iaa.AdditiveLaplaceNoise(scale=(10, 30)),           # Laplace noise
-            iaa.ImpulseNoise(p=(0.01, 0.1)),                    # Impulse noise
-            iaa.SaltAndPepper(p=(0.02, 0.1)),                   # Salt and pepper noise
-            iaa.Salt(p=(0.02, 0.1)),                            # Salt noise
-            iaa.Pepper(p=(0.02, 0.1)),                          # Pepper noise
-            
-            # Coarse noise
-            iaa.CoarseSaltAndPepper(p=(0.02, 0.1), size_percent=(0.01, 0.05)),  # Coarse salt and pepper
-            iaa.CoarseSalt(p=(0.02, 0.1), size_percent=(0.01, 0.05)),           # Coarse salt
-            iaa.CoarsePepper(p=(0.02, 0.1), size_percent=(0.01, 0.05)),         # Coarse pepper
-            iaa.CoarseDropout(p=(0.02, 0.15), size_percent=(0.02, 0.15)),       # Coarse dropout
-        ])
-        
-        # 2. Blur augmenters
-        blur_augs = iaa.OneOf([
-            iaa.GaussianBlur(sigma=(0.5, 3.0)),                  # Gaussian blur
-            iaa.AverageBlur(k=(2, 7)),                           # Average blur
-            iaa.MedianBlur(k=(3, 7)),                            # Median blur
-            iaa.MotionBlur(k=(3, 7)),                            # Motion blur
-        ])
-        
-        # 3. Weather augmenters
-        weather_augs = iaa.OneOf([
-            iaa.Clouds(),                                         # Clouds
-            iaa.Fog(),                                            # Fog
-            iaa.Snowflakes(density=(0.01, 0.05), density_uniformity=(0.3, 0.8)), # Snowflakes
-            iaa.Rain(drop_size=(0.1, 0.2), speed=(0.1, 0.3)),     # Rain
-        ])
-        
-        # Apply augmentation with different probabilities
-        aug = iaa.Sequential([
-            iaa.Sometimes(0.9, noise_augs),     # 90% probability for noise
-            iaa.Sometimes(0.05, blur_augs),     # 5% probability for blur
-            iaa.Sometimes(0.05, weather_augs)   # 5% probability for weather
-        ], random_order=True)  # Apply in random order
-        
-        # Apply imgaug augmentation
-        augmented_image = aug.augment_image(image)
-        
-        return augmented_image
-
     def extract_episode_item(self, hdf5_file):
         """
         Extract a single sample from HDF5 file
@@ -445,22 +401,41 @@ class RobotwinAgilexDataset:
                     last_part = np.repeat(action_chunk[-1:], self.chunk_size - action_chunk.shape[0], axis=0)
                     action_chunk = np.concatenate([action_chunk, last_part], axis=0)
                 
-                # Get stitched camera data
+                # Get multi-view camera data
                 try:
-                    # Load stitched camera data from observation/camera/rgb
-                    camera_path = "observation/camera/rgb"
+                    current_images = []
                     
-                    if camera_path not in f:
-                        print(f"Warning: Stitched camera data {camera_path} not found in {hdf5_file}")
+                    # Define camera paths for 3-view setup (no front camera)
+                    camera_paths = {
+                        "cam_high": "observation/head_camera/rgb",
+                        "cam_left_wrist": "observation/left_camera/rgb",
+                        "cam_right_wrist": "observation/right_camera/rgb"
+                    }
+                    
+                    # Load images from each configured camera
+                    for cam_idx, cam_name in enumerate(self.cameras):
+                        cam_path = camera_paths.get(cam_name)
+                        if cam_path and cam_path in f:
+                            camera_data = f[cam_path]
+                            img_frames = self.parse_img_data(camera_data, index)
+                            current_images.append(img_frames)
+                        else:
+                            print(f"Warning: Camera {cam_name} not found in {hdf5_file}")
+                            return None
+                    
+                    # Ensure we have the correct number of cameras
+                    if len(current_images) != self.num_cameras:
+                        print(f"Error: Expected {self.num_cameras} cameras, but got {len(current_images)}")
                         return None
                     
-                    camera_data = f[camera_path]
-                    img_frames = self.parse_img_data(camera_data, index)
-                    img_frames_np = np.array([img_frames])  # Shape: [1, history_size, H, W, 3]
+                    # Convert to numpy array with shape [num_cameras, history_size, H, W, 3]
+                    img_frames_np = np.array(current_images)
                     
-                    # Create image mask
+                    # Create image masks for each camera
                     mask_length = self.img_history_size
-                    current_images_mask = [np.array([True]*mask_length, dtype=bool)]
+                    current_images_mask = [
+                        np.array([True]*mask_length, dtype=bool) for _ in range(self.num_cameras)
+                    ]
                     
                 except Exception as e:
                     print(f"Error accessing camera data in {hdf5_file}: {e}")
@@ -607,6 +582,9 @@ if __name__ == "__main__":
             success_count += 1
             print("Successfully loaded data")
             print(f"Instruction embedding shape: {item['instruction'].shape}")
-            print(f"Image shape: {item['current_images'].shape}")
+            print(f"Multi-view images shape: {item['current_images'].shape}")
+            print(f"Number of cameras: {len(item['current_images_mask'])}")
+            print(f"Actions shape: {item['actions'].shape}")
+            print(f"States shape: {item['states'].shape}")
     
     print(f"\nResult: Successfully loaded {success_count}/{test_times} samples") 
