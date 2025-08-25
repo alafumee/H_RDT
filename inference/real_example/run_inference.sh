@@ -4,10 +4,11 @@
 # Set your paths and parameters here
 
 # Model paths
-export CONFIG_PATH="./configs/hrdt_config.yaml"
+## Note in particular that lang_embeddings,hrdt.yaml, stats.json in /H_RDT/inference/real_example/utils, are just examples, you need to change them to your configuration
+export CONFIG_PATH="./utils/hrdt.yaml"   # TODO: change to the your own finetune config
 export PRETRAINED_MODEL_PATH="./checkpoints/robotwin2/checkpoint-50000/pytorch_model.bin"
-export LANG_EMBEDDINGS_PATH="./embeddings/grab_blue_cup.pt"
-export STAT_FILE_PATH="./utils/stats.json"
+export LANG_EMBEDDINGS_PATH="./utils/lang_embeddings/grab_blue_cup.pt"  # TODO: change to the your own lang embeddings
+export STAT_FILE_PATH="./utils/stats.json"   # TODO: change to the your own stats file
 
 # Inference parameters
 export CHUNK_SIZE=16
