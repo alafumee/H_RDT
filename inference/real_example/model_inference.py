@@ -83,7 +83,7 @@ class HRDTInference:
         pred_horizon = self.config["common"]["action_chunk_size"]
         
         # Create H-RDT model
-        self.policy = RDTRunner.from_pretrained(
+        self.policy = HRDTRunner.from_pretrained(
             pretrained_model_name_or_path=self.args.pretrained_model_path,
             state_dim=state_dim,
             action_dim=action_dim,
