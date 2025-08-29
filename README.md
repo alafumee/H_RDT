@@ -1,5 +1,5 @@
 # H-RDT: Human Manipulation Enhanced Bimanual Robotic Manipulation
-### 📝[Paper](https://arxiv.org/abs/2507.23523) | 🌍[Project Page](https://embodiedfoundation.github.io/hrdt) | 🤗[Model](https://huggingface.co/embodiedfoundation/H-RDT) 
+### 📝[Paper](https://arxiv.org/abs/2507.23523) | 🌍[Project Page](https://embodiedfoundation.github.io/hrdt) | 🤗[Model](https://huggingface.co/embodiedfoundation/H-RDT) | 💬[WeChat Contact](#-contact-us) 
 
 ![H-RDT](assets/h-rdt.jpg)
 
@@ -166,3 +166,25 @@ elif self.dataset_name == "your_robot_name":
 - `configs/hrdt_finetune.yaml`: Robot fine-tuning configuration  
 - `datasets/dataset.py`: Dataset selection and initialization
 - Modify `state_dim`, `action_dim`, `output_size` for your robot
+
+## 📞 Contact Us
+
+### WeChat Discussion Group
+Join our WeChat group to discuss H-RDT related technical issues:
+
+<div align="center">
+<img src="assets/wechat_group_qr.jpg" width="200" alt="WeChat Group QR Code">
+<p><em>WeChat Group QR Code</em></p>
+</div>
+
+### Personal WeChat
+For other questions or collaboration opportunities, please add personal WeChat:
+
+<div align="center">
+<img src="assets/personal_wechat_qr.jpg" width="200" alt="Personal WeChat QR Code">
+<p><em>Personal WeChat QR Code</em></p>
+</div>
+
+---
+
+*Note: If the QR code expires, please contact us through project Issues for the latest contact information.*
