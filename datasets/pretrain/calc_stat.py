@@ -20,6 +20,10 @@ def collect_egodex_action_stats(root_dir, output_path, large_values_log="large_v
     # Initialize statistics containers
     global_min = None
     global_max = None
+    global_eef_min = None
+    global_eef_max = None
+    global_eef_rotmat_min = None
+    global_eef_rotmat_max = None
     file_count = 0
     error_files = []
     
@@ -30,6 +34,10 @@ def collect_egodex_action_stats(root_dir, output_path, large_values_log="large_v
     # Find all HDF5 files
     root_path = Path(root_dir)
     hdf5_files = []
+
+    file_min_list = []
+    file_max_list = []
+    file_first_frame_list = []
     
     # Traverse all part directories
     for part in ['part1', 'part2', 'part3', 'part4', 'part5', 'extra', 'test']:
@@ -73,17 +81,93 @@ def collect_egodex_action_stats(root_dir, output_path, large_values_log="large_v
                         global_min = np.minimum(global_min, np.min(action_data, axis=0))
                         global_max = np.maximum(global_max, np.max(action_data, axis=0))
                     
-                    file_count += 1
+                    # file_count += 1
                 else:
                     error_files.append((str(file_path), "Missing actions_48d data (run precompute_48d_actions.py first)"))
+        
+                if "actions_eef" in f:
+                    eef_data = f['actions_eef'][:]
+
+                    # check if data shape is correct
+                    if eef_data.shape[1] != 14:
+                        error_files.append((str(file_path), f"Wrong eef action dimension: {eef_data.shape[1]}, expected 14"))
+                        continue
+                    
+                    # file_min_list.append(np.min(action_data, axis=0))
+                    # file_max_list.append(np.max(action_data, axis=0))
+                    # file_first_frame_list.append(eef_data[0])
+
+                    # Initialize or update global extremes for eef actions
+                    if global_eef_min is None:
+                        global_eef_min = np.min(eef_data, axis=0)
+                        global_eef_max = np.max(eef_data, axis=0)
+                    else:
+                        global_eef_min = np.minimum(global_eef_min, np.min(eef_data, axis=0))
+                        global_eef_max = np.maximum(global_eef_max, np.max(eef_data, axis=0))
+                    del eef_data  # free memory
+                else:
+                    error_files.append((str(file_path), "Missing actions_eef data"))
+
+                if "actions_eef_rotmat" in f:
+                    eef_rotmat_data = f['actions_eef_rotmat'][:]
+
+                    # check if data shape is correct
+                    if eef_rotmat_data.shape[1] != 20:
+                        error_files.append((str(file_path), f"Wrong eef_rotmat action dimension: {eef_rotmat_data.shape[1]}, expected 48"))
+                        continue
+                    
+                    # Check if there are dimensions with absolute values exceeding threshold
+                    if np.any(np.abs(eef_rotmat_data) > threshold):
+                        large_values_files.append(str(file_path))
+                        
+                        # Get specific frame and dimension information
+                        abs_data = np.abs(eef_rotmat_data)
+                        frames, dims = np.where(abs_data > threshold)
+                        max_val = abs_data.max()
+                        print(f"Large values found in {file_path}: max={max_val:.3f}")
+                    
+                    # Initialize or update global extremes for eef_rotmat actions
+                    if global_eef_rotmat_min is None:
+                        global_eef_rotmat_min = np.min(eef_rotmat_data, axis=0)
+                        global_eef_rotmat_max = np.max(eef_rotmat_data, axis=0)
+                    else:
+                        global_eef_rotmat_min = np.minimum(global_eef_rotmat_min, np.min(eef_rotmat_data, axis=0))
+                        global_eef_rotmat_max = np.maximum(global_eef_rotmat_max, np.max(eef_rotmat_data, axis=0))
+                    
+                    file_count += 1
+
+                else:
+                    error_files.append((str(file_path), "Missing actions_eef_rotmat data"))
+                    
+        
         except Exception as e:
             error_files.append((str(file_path), str(e)))
+    
+    # save file-wise min/max for reference
+    # if file_min_list and file_max_list:
+    #     file_min_array = np.vstack(file_min_list)
+    #     file_max_array = np.vstack(file_max_list)
+    #     np.savez_compressed(
+    #         Path(output_path).with_name(Path(output_path).stem.replace('_stat', '_file_stat') + '.npz'),
+    #         file_mins=file_min_array, file_maxs=file_max_array
+    #     )
+
+    # if file_first_frame_list:
+    #     file_first_frame_array = np.vstack(file_first_frame_list)
+    #     np.savez_compressed(
+    #         Path(output_path).with_name(Path(output_path).stem.replace('_stat', '_first_frames') + '.npz'),
+    #         first_frames=file_first_frame_array
+    #     )
 
     # Generate statistics results
     stat_dict = {
         "egodex": {
             "min": global_min.tolist() if global_min is not None else [],
             "max": global_max.tolist() if global_max is not None else [],
+            "eef_min": global_eef_min.tolist() if global_eef_min is not None else [],
+            "eef_max": global_eef_max.tolist() if global_eef_max is not None else [],
+            "eef_rotmat_min": global_eef_rotmat_min.tolist() if global_eef_rotmat_min is not None else [],
+            "eef_rotmat_max": global_eef_rotmat_max.tolist() if global_eef_rotmat_max is not None else [],
         }
     }
 
@@ -92,10 +176,10 @@ def collect_egodex_action_stats(root_dir, output_path, large_values_log="large_v
         json.dump(stat_dict, f, indent=4)
     
     # Save list of files with outliers
-    with open(large_values_log, 'w') as f:
-        f.write(f"Found {len(large_values_files)} files containing 48-dimensional action data with absolute values > {threshold}:\n\n")
-        for file_path in large_values_files:
-            f.write(f"{file_path}\n")
+    # with open(large_values_log, 'w') as f:
+    #     f.write(f"Found {len(large_values_files)} files containing 48-dimensional action data with absolute values > {threshold}:\n\n")
+    #     for file_path in large_values_files:
+    #         f.write(f"{file_path}\n")
 
     # Print statistics information
     print(f"\nEgoDx 48-dimensional action statistics completed! Successfully processed {file_count} files")

@@ -520,7 +520,7 @@ class RobotwinAgilexDataset:
             episode_file = random.choice(task_episodes)
         
         # Try to extract sample data
-        for _ in range(3):  # Maximum 3 attempts
+        for _ in range(1):  # Maximum 3 attempts
             item = self.extract_episode_item(episode_file)
             if item is not None:
                 return item

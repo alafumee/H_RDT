@@ -23,9 +23,27 @@ CONFIG_PATH = os.environ.get('HRDT_CONFIG_PATH', os.path.join(PROJECT_ROOT, "con
 TARGET_DIR = os.environ.get('EGODEX_DATA_ROOT', "/share/hongzhe/datasets/egodex/")
 
 # Multi-process configuration (can be overridden by environment variables)
-NUM_GPUS = int(os.environ.get('NUM_GPUS', 8))  # Total number of GPUs
+NUM_GPUS = int(os.environ.get('NUM_GPUS', 4))  # Total number of GPUs
 PROCESSES_PER_GPU = int(os.environ.get('PROCESSES_PER_GPU', 4))  # Processes per GPU
 TOTAL_PROCESSES = NUM_GPUS * PROCESSES_PER_GPU  # Total processes
+
+def test_embedding(pt_path):
+    if not os.path.exists(pt_path):
+        print("File not yet created: ", pt_path)
+        return False
+    else:
+        try:
+            embed_dict = torch.load(pt_path)
+            if "embeddings" in embed_dict:
+                embedding = embed_dict["embeddings"]
+                if embedding.shape[-1] != 4096:
+                    print("File embedding dimension mismatch: ", pt_path)
+                    return False
+        except:
+            print("File corrupted: ", pt_path)
+            return False
+    return True
+
 
 
 def collect_all_files():
@@ -59,7 +77,7 @@ def collect_all_files():
                     pt_path = os.path.join(task_dir, pt_file)
                     
                     # Only add files that haven't been processed yet
-                    if not os.path.exists(pt_path):
+                    if not test_embedding(pt_path): # os.path.exists(pt_path):
                         all_files.append({
                             'hdf5_path': hdf5_path,
                             'pt_path': pt_path,
@@ -68,6 +86,8 @@ def collect_all_files():
                             'file_index': file_index
                         })
     
+    # print(("Files to process: ", all_files), flush=True)
+
     return all_files
 
 

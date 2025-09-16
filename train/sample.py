@@ -3,16 +3,24 @@ from collections import defaultdict
 import torch
 import torch.nn.functional as F
 
+from .renderer import EgoDexRenderer
+
+# def visualize_sample_res(images, pred_actions):
+#     pass
 
 @torch.no_grad()
 def log_sample_res(
     hrdt, args, config, accelerator, weight_dtype, dataset_id2name, 
-    dataloader, logger, vision_encoder
+    dataloader, logger, vision_encoder,
 ):
     logger.info(
         f"Running sampling for {args.num_sample_batches} batches..."
     )
     hrdt.eval()
+
+    visualize = args.visualize_during_training
+
+    # vis_prob = 0.01
 
     loss_for_log = defaultdict(float)
     loss_counter = defaultdict(int)
@@ -20,9 +28,41 @@ def log_sample_res(
     loss_counter["overall_avg_sample_mse"] = 0
     loss_counter["overall_avg_sample_l2err"] = 0
 
+    renderer = EgoDexRenderer()
+
+    import json, numpy as np
+    from datetime import datetime
+    with open('/scratch/yz12129/hrdt_pretrain/egodex_stat.json', 'r') as f:
+        stat = json.load(f)
+    # action_min = np.array(stat['egodex']['eef_rotmat_min'])
+    # action_max = np.array(stat['egodex']['eef_rotmat_max'])
+    # print("action_rotmat_min:", action_min.shape)
+    # print("action_rotmat_max:", action_max.shape)
+    # action_eef_min = np.array(stat['egodex']['eef_min'])
+    # action_eef_max = np.array(stat['egodex']['eef_max'])
+    # print("action_eef_min:", action_eef_min.shape)
+    # print("action_eef_max:", action_eef_max.shape)
+    if args.action_mode == '48d':
+        action_min = np.array(stat['egodex']['min'])
+        action_max = np.array(stat['egodex']['max'])
+    elif args.action_mode == 'eef_rotmat':
+        action_min = np.array(stat['egodex']['eef_rotmat_min'])
+        action_max = np.array(stat['egodex']['eef_rotmat_max'])
+    elif args.action_mode == 'eef':
+        action_min = np.array(stat['egodex']['eef_min'])
+        action_max = np.array(stat['egodex']['eef_max'])
+
     for step, batch in enumerate(dataloader):
         if step >= args.num_sample_batches:
             break
+        
+        if visualize:
+            original_image_sequence = batch['original_images'][0].cpu().numpy() # (T, H, W, 3), uint8
+            renderer.consume_data(image_frames=original_image_sequence)
+
+            extrinsics = batch['extrinsics'][0].cpu().numpy() # (T, 4, 4)
+            intrinsics = batch['intrinsics'][0].cpu().numpy() # (T, 3, 3)
+            renderer.consume_data(intrinsics=intrinsics, extrinsics=extrinsics)
 
         # Process image data
         if isinstance(batch["images"], dict):
@@ -62,7 +102,169 @@ def log_sample_res(
             lang_tokens=lang_embeds,
             lang_attn_mask=lang_attn_mask,
         )
-        
+
+        if visualize and accelerator.is_main_process:
+
+            now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            if args.action_mode == '48d':
+
+                # left hand
+
+                scaled_pred_actions = (pred_actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+                scaled_gt_actions = (actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+
+                print("gt 48d action:", scaled_gt_actions[0, :, :9])
+                # comment this for pred
+                # scaled_pred_actions = scaled_gt_actions.copy()
+
+                pred_first_rot = scaled_pred_actions[0, :, 3:9]
+                pred_rot_x = pred_first_rot[:, :3] # first column of rotation matrix
+                orthonormalized_x = pred_rot_x / np.linalg.norm(pred_rot_x, axis=1, keepdims=True)
+                pred_rot_y = pred_first_rot[:, 3:6] # second column of rotation matrix
+                orthonormalized_y = pred_rot_y - (np.sum(pred_rot_y * orthonormalized_x, axis=1, keepdims=True) * orthonormalized_x)
+                orthonormalized_y = orthonormalized_y / np.linalg.norm(orthonormalized_y, axis=1, keepdims=True)
+                ortho_pred_rot_x = torch.tensor(orthonormalized_x, dtype=torch.float32)
+                ortho_pred_rot_y = torch.tensor(orthonormalized_y, dtype=torch.float32)
+                ortho_pred_rot_z = torch.cross(torch.tensor(ortho_pred_rot_x), torch.tensor(ortho_pred_rot_y), dim=1)
+                rot_mat = torch.stack([ortho_pred_rot_x, ortho_pred_rot_y, ortho_pred_rot_z], dim=2) # (num_steps, 3, 3)
+                rot_mat = rot_mat.cpu().numpy()
+
+                # for right hand
+                pred_first_rot_right = scaled_pred_actions[0, :, 27:33]
+                pred_rot_x_right = pred_first_rot_right[:, :3] # first column of rotation
+                orthonormalized_x_right = pred_rot_x_right / np.linalg.norm(pred_rot_x_right, axis=1, keepdims=True)
+                pred_rot_y_right = pred_first_rot_right[:, 3:6] # second column
+                orthonormalized_y_right = pred_rot_y_right - (np.sum(pred_rot_y_right * orthonormalized_x_right, axis=1, keepdims=True) * orthonormalized_x_right)
+                orthonormalized_y_right = orthonormalized_y_right / np.linalg.norm(orthonormalized_y_right, axis=1, keepdims=True)
+                ortho_pred_rot_x_right = torch.tensor(orthonormalized_x_right, dtype=torch.float32)
+                ortho_pred_rot_y_right = torch.tensor(orthonormalized_y_right, dtype=torch.float32)
+                ortho_pred_rot_z_right = torch.cross(torch.tensor(ortho_pred_rot_x_right), torch.tensor(ortho_pred_rot_y_right), dim=1)
+                rot_mat_right = torch.stack([ortho_pred_rot_x_right, ortho_pred_rot_y_right, ortho_pred_rot_z_right], dim=2) # (num_steps, 3, 3)
+                rot_mat_right = rot_mat_right.cpu().numpy()
+
+                renderer.consume_data(eef_pos=scaled_pred_actions[0, :, :3], eef_rot=rot_mat,
+                                    eef2_pos=scaled_pred_actions[0, :, 24:27], eef2_rot=rot_mat_right)
+                
+                # repeat for ground truth
+                gt_first_rot = scaled_gt_actions[0, :, 3:9]
+                gt_rot_x = gt_first_rot[:, :3] # first column of rotation matrix
+                orthonormalized_x = gt_rot_x / np.linalg.norm(gt_rot_x, axis=1, keepdims=True)
+                gt_rot_y = gt_first_rot[:, 3:6] # second column of rotation matrix
+                orthonormalized_y = gt_rot_y - (np.sum(gt_rot_y * orthonormalized_x, axis=1, keepdims=True) * orthonormalized_x)
+                orthonormalized_y = orthonormalized_y / np.linalg.norm(orthonormalized_y, axis=1, keepdims=True)
+                ortho_gt_rot_x = torch.tensor(orthonormalized_x, dtype=torch.float32)
+                ortho_gt_rot_y = torch.tensor(orthonormalized_y, dtype=torch.float32)
+                ortho_gt_rot_z = torch.cross(torch.tensor(ortho_gt_rot_x), torch.tensor(ortho_gt_rot_y), dim=1)
+                rot_mat = torch.stack([ortho_gt_rot_x, ortho_gt_rot_y, ortho_gt_rot_z], dim=2) # (num_steps, 3, 3)
+                rot_mat = rot_mat.cpu().numpy()
+
+                # for right hand
+                gt_first_rot_right = scaled_gt_actions[0, :, 27:33]
+                gt_rot_x_right = gt_first_rot_right[:, :3] # first column of rotation
+                orthonormalized_x_right = gt_rot_x_right / np.linalg.norm(gt_rot_x_right, axis=1, keepdims=True)
+                gt_rot_y_right = gt_first_rot_right[:, 3:6] # second column
+                orthonormalized_y_right = gt_rot_y_right - (np.sum(gt_rot_y_right * orthonormalized_x_right, axis=1, keepdims=True) * orthonormalized_x_right)
+                orthonormalized_y_right = orthonormalized_y_right / np.linalg.norm(orthonormalized_y_right, axis=1, keepdims=True)
+                ortho_gt_rot_x_right = torch.tensor(orthonormalized_x_right, dtype=torch.float32)
+                ortho_gt_rot_y_right = torch.tensor(orthonormalized_y_right, dtype=torch.float32)
+                ortho_gt_rot_z_right = torch.cross(torch.tensor(ortho_gt_rot_x_right), torch.tensor(ortho_gt_rot_y_right), dim=1)
+                rot_mat_right = torch.stack([ortho_gt_rot_x_right, ortho_gt_rot_y_right, ortho_gt_rot_z_right], dim=2) # (num_steps, 3, 3)
+                rot_mat_right = rot_mat_right.cpu().numpy()
+
+                renderer.consume_data(gt_eef_pos=scaled_gt_actions[0, :, :3], gt_eef_rot=rot_mat,
+                                    gt_eef2_pos=scaled_gt_actions[0, :, 24:27], gt_eef2_rot=rot_mat_right)
+                
+                renderer.run(output_path=f'/home/yz12129/hrdt_vis/sample_vis/48d_{now_time}_pred.avi')
+            
+            elif args.action_mode == 'eef_rotmat':
+
+                # left hand
+
+                scaled_pred_actions = (pred_actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+                scaled_gt_actions = (actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+
+                # comment this for pred
+                # scaled_pred_actions = scaled_gt_actions.copy()
+
+                pred_first_rot = scaled_pred_actions[0, :, 3:9]
+                pred_rot_x = pred_first_rot[:, :3] # first column of rotation matrix
+                orthonormalized_x = pred_rot_x / np.linalg.norm(pred_rot_x, axis=1, keepdims=True)
+                pred_rot_y = pred_first_rot[:, 3:6] # second column of rotation matrix
+                orthonormalized_y = pred_rot_y - (np.sum(pred_rot_y * orthonormalized_x, axis=1, keepdims=True) * orthonormalized_x)
+                orthonormalized_y = orthonormalized_y / np.linalg.norm(orthonormalized_y, axis=1, keepdims=True)
+                ortho_pred_rot_x = torch.tensor(orthonormalized_x, dtype=torch.float32)
+                ortho_pred_rot_y = torch.tensor(orthonormalized_y, dtype=torch.float32)
+                ortho_pred_rot_z = torch.cross(torch.tensor(ortho_pred_rot_x), torch.tensor(ortho_pred_rot_y), dim=1)
+                rot_mat = torch.stack([ortho_pred_rot_x, ortho_pred_rot_y, ortho_pred_rot_z], dim=2) # (num_steps, 3, 3)
+                rot_mat = rot_mat.cpu().numpy()
+
+                # for right hand
+                pred_first_rot_right = scaled_pred_actions[0, :, 13:19]
+                pred_rot_x_right = pred_first_rot_right[:, :3] # first column of rotation
+                orthonormalized_x_right = pred_rot_x_right / np.linalg.norm(pred_rot_x_right, axis=1, keepdims=True)
+                pred_rot_y_right = pred_first_rot_right[:, 3:6] # second column
+                orthonormalized_y_right = pred_rot_y_right - (np.sum(pred_rot_y_right * orthonormalized_x_right, axis=1, keepdims=True) * orthonormalized_x_right)
+                orthonormalized_y_right = orthonormalized_y_right / np.linalg.norm(orthonormalized_y_right, axis=1, keepdims=True)
+                ortho_pred_rot_x_right = torch.tensor(orthonormalized_x_right, dtype=torch.float32)
+                ortho_pred_rot_y_right = torch.tensor(orthonormalized_y_right, dtype=torch.float32)
+                ortho_pred_rot_z_right = torch.cross(torch.tensor(ortho_pred_rot_x_right), torch.tensor(ortho_pred_rot_y_right), dim=1)
+                rot_mat_right = torch.stack([ortho_pred_rot_x_right, ortho_pred_rot_y_right, ortho_pred_rot_z_right], dim=2) # (num_steps, 3, 3)
+                rot_mat_right = rot_mat_right.cpu().numpy()
+
+                renderer.consume_data(eef_pos=scaled_pred_actions[0, :, :3], eef_rot=rot_mat,
+                                    eef2_pos=scaled_pred_actions[0, :, 10:13], eef2_rot=rot_mat_right)
+                
+                # repeat for ground truth
+                gt_first_rot = scaled_gt_actions[0, :, 3:9]
+                gt_rot_x = gt_first_rot[:, :3] # first column of rotation matrix
+                orthonormalized_x = gt_rot_x / np.linalg.norm(gt_rot_x, axis=1, keepdims=True)
+                gt_rot_y = gt_first_rot[:, 3:6] # second column of rotation matrix
+                orthonormalized_y = gt_rot_y - (np.sum(gt_rot_y * orthonormalized_x, axis=1, keepdims=True) * orthonormalized_x)
+                orthonormalized_y = orthonormalized_y / np.linalg.norm(orthonormalized_y, axis=1, keepdims=True)
+                ortho_gt_rot_x = torch.tensor(orthonormalized_x, dtype=torch.float32)
+                ortho_gt_rot_y = torch.tensor(orthonormalized_y, dtype=torch.float32)
+                ortho_gt_rot_z = torch.cross(torch.tensor(ortho_gt_rot_x), torch.tensor(ortho_gt_rot_y), dim=1)
+                rot_mat = torch.stack([ortho_gt_rot_x, ortho_gt_rot_y, ortho_gt_rot_z], dim=2) # (num_steps, 3, 3)
+                rot_mat = rot_mat.cpu().numpy()
+
+                # for right hand
+                gt_first_rot_right = scaled_gt_actions[0, :, 13:19]
+                gt_rot_x_right = gt_first_rot_right[:, :3] # first column of rotation
+                orthonormalized_x_right = gt_rot_x_right / np.linalg.norm(gt_rot_x_right, axis=1, keepdims=True)
+                gt_rot_y_right = gt_first_rot_right[:, 3:6] # second column
+                orthonormalized_y_right = gt_rot_y_right - (np.sum(gt_rot_y_right * orthonormalized_x_right, axis=1, keepdims=True) * orthonormalized_x_right)
+                orthonormalized_y_right = orthonormalized_y_right / np.linalg.norm(orthonormalized_y_right, axis=1, keepdims=True)
+                ortho_gt_rot_x_right = torch.tensor(orthonormalized_x_right, dtype=torch.float32)
+                ortho_gt_rot_y_right = torch.tensor(orthonormalized_y_right, dtype=torch.float32)
+                ortho_gt_rot_z_right = torch.cross(torch.tensor(ortho_gt_rot_x_right), torch.tensor(ortho_gt_rot_y_right), dim=1)
+                rot_mat_right = torch.stack([ortho_gt_rot_x_right, ortho_gt_rot_y_right, ortho_gt_rot_z_right], dim=2) # (num_steps, 3, 3)
+                rot_mat_right = rot_mat_right.cpu().numpy()
+
+                renderer.consume_data(gt_eef_pos=scaled_gt_actions[0, :, :3], gt_eef_rot=rot_mat,
+                                    gt_eef2_pos=scaled_gt_actions[0, :, 10:13], gt_eef2_rot=rot_mat_right)
+                
+                renderer.run(output_path=f'/home/yz12129/hrdt_vis/sample_vis/eef_rotmat_{now_time}_pred.avi')
+
+            elif args.action_mode == 'eef':
+
+                scaled_pred_actions = (pred_actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+                scaled_gt_actions = (actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+
+                from scipy.spatial.transform import Rotation as R
+                pred_eef_rot = R.from_rotvec(scaled_pred_actions[0, :, 3:6]).as_matrix() # (num_steps, 3, 3)
+                pred_eef2_rot = R.from_rotvec(scaled_pred_actions[0, :, 10:13]).as_matrix() # (num_steps, 3, 3)
+                renderer.consume_data(eef_pos=scaled_pred_actions[0, :, :3], eef_rot=pred_eef_rot,
+                                    eef2_pos=scaled_pred_actions[0, :, 7:10], eef2_rot=pred_eef2_rot)
+                
+                gt_eef_rot = R.from_rotvec(scaled_gt_actions[0, :, 3:6]).as_matrix() # (num_steps, 3, 3)
+                gt_eef2_rot = R.from_rotvec(scaled_gt_actions[0, :, 10:13]).as_matrix() # (num_steps, 3, 3)
+                renderer.consume_data(gt_eef_pos=scaled_gt_actions[0, :, :3], gt_eef_rot=gt_eef_rot,
+                                    gt_eef2_pos=scaled_gt_actions[0, :, 7:10], gt_eef2_rot=gt_eef2_rot)
+                renderer.run(output_path=f'/home/yz12129/hrdt_vis/sample_vis/eef_{now_time}_pred.avi')
+                
+
+
         num_steps = pred_actions.shape[1]
         expanded_action_norm = action_norm.float()
 

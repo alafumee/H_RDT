@@ -21,10 +21,10 @@ echo "Output Dir: $HRDT_OUTPUT_DIR"
 
 # Step 1: Precompute 48D actions
 echo "Step 1: Precomputing 48D actions..."
-python datasets/pretrain/precompute_48d_actions.py \
-    --data_root "$EGODEX_DATA_ROOT" \
-    --num_processes "$NUM_PROCESSES" \
-    $([ "$FORCE_OVERWRITE" = "true" ] && echo "--force_overwrite")
+# python datasets/pretrain/precompute_48d_actions.py \
+#     --data_root "$EGODEX_DATA_ROOT" \
+#     --num_processes "$NUM_PROCESSES" \
+#     $([ "$FORCE_OVERWRITE" = "true" ] && echo "--force_overwrite")
 
 # Step 2: Calculate statistics
 echo "Step 2: Calculating dataset statistics..."
@@ -35,7 +35,7 @@ python datasets/pretrain/calc_stat.py \
 
 # Step 3: Encode language embeddings
 echo "Step 3: Encoding language embeddings..."
-python datasets/pretrain/encode_lang_batch.py
+# python datasets/pretrain/encode_lang_batch.py
 
 echo "Pretrain pipeline completed!"
 echo "Generated files:"

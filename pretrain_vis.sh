@@ -10,7 +10,7 @@ export LDFLAGS="-L/usr/lib/x86_64-linux-gnu"
 export CUTLASS_PATH="/data/lingxuan/cutlass"
 
 export WANDB_PROJECT="hrdt"
-export OUTPUT_DIR="./checkpoints/pretrain_2"
+export OUTPUT_DIR="./checkpoints/pretrain_vistest"
 
 export VISION_ENCODER_NAME="dino-siglip"
 
@@ -26,21 +26,21 @@ fi
 #     --deepspeed="./configs/zero2.json" \
 #     ...
 
-accelerate launch --num_processes=8 --main_process_port 29500 main.py \
+accelerate launch --num_processes=1 --main_process_port 29500 main.py \
     --pretrained_vision_encoder_name_or_path=$VISION_ENCODER_NAME \
     --deepspeed="./configs/zero1.json" \
     --config_path="configs/hrdt_pretrain.yaml" \
     --output_dir=$OUTPUT_DIR \
     --train_batch_size=32 \
-    --sample_batch_size=32 \
-    --max_train_steps=1000000 \
+    --sample_batch_size=1 \
+    --max_train_steps=155010 \
     --checkpointing_period=5000 \
-    --sample_period=500 \
+    --sample_period=2 \
     --checkpoints_total_limit=40 \
     --lr_scheduler="constant_with_warmup" \
-    --learning_rate=1e-4 \
+    --learning_rate=0 \
     --mixed_precision="bf16" \
-    --dataloader_num_workers=32 \
+    --dataloader_num_workers=8 \
     --dataset_type="finetune" \
     --report_to=wandb \
     --upsample_rate=3 \
@@ -52,6 +52,8 @@ accelerate launch --num_processes=8 --main_process_port 29500 main.py \
     --allow_tf32 \
     --dataset_name="egodex" \
     --action_mode="48d" \
+    --resume_from_checkpoint="checkpoint-155000" \
+    --visualize_during_training \
 
     # For finetune mode with specific robot embodiment, use these parameters instead:
     # --mode="finetune" \
@@ -63,3 +65,5 @@ accelerate launch --num_processes=8 --main_process_port 29500 main.py \
     # --resume_from_checkpoint="checkpoint-36000" \
     # Use this to load from saved lanuage instruction embeddings,
     # instead of calculating it during training
+
+    # to select between 48d and 14d action, change line 258 in egodex_dataset.py

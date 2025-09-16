@@ -26,7 +26,7 @@ fi
 #     --deepspeed="./configs/zero2.json" \
 #     ...
 
-accelerate launch --main_process_port 29500 main.py \
+accelerate launch --num_processes=1 --main_process_port 29500 main.py \
     --pretrained_vision_encoder_name_or_path=$VISION_ENCODER_NAME \
     --deepspeed="./configs/zero1.json" \
     --config_path="configs/hrdt_finetune.yaml" \
@@ -49,7 +49,8 @@ accelerate launch --main_process_port 29500 main.py \
     --precomp_lang_embed \
     --training_mode="lang" \
     --mode="finetune" \
-    --pretrained_backbone_path="./checkpoints/pretrain-0618/checkpoint-500000/pytorch_model.bin"
+    --pretrained_backbone_path="./checkpoints/pretrain-0618/checkpoint-500000/pytorch_model.bin" \
+    --dataset_name="robotwin_agilex" \
 
     # For finetune mode with specific robot embodiment, use these parameters instead:
     # --mode="finetune" \

@@ -117,3 +117,15 @@ def pose10d_to_mat(d10):
     out[...,:3,3] = pos
     out[...,3,3] = 1
     return out
+
+def mat_to_euler_angles(mat):
+    rot = st.Rotation.from_matrix(mat[...,:3,:3])
+    return rot.as_euler('xyz')
+
+def euler_angles_to_mat(pos, euler):
+    rot = st.Rotation.from_euler('xyz', euler)
+    return pos_rot_to_mat(pos, rot)
+
+def mat_to_rotvec(mat):
+    rot = st.Rotation.from_matrix(mat[...,:3,:3])
+    return rot.as_rotvec()

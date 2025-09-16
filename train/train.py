@@ -45,7 +45,7 @@ from models.hrdt_runner import HRDTRunner
 from models.encoder.dinosiglip_vit import DinoSigLIPViTBackbone
 from transformers import AutoTokenizer, AutoModel
 from torchvision import transforms
-from datasets.dataset import DataCollatorForVLAConsumerDataset, VLAConsumerDataset
+from datasets.dataset import DataCollatorForVLAConsumerDataset, VLAConsumerDataset, VLAVisualizeDataset, DataCollatorForVLAVisualizeDataset
 from train.sample import log_sample_res
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="skimage")
@@ -251,6 +251,9 @@ def train(args, logger):
         eps=args.adam_epsilon,
     )
 
+    val_class = VLAVisualizeDataset if args.visualize_during_training else VLAConsumerDataset
+    val_collator_class = DataCollatorForVLAVisualizeDataset if args.visualize_during_training else DataCollatorForVLAConsumerDataset
+
     # Create dataset and dataloader
     train_dataset = VLAConsumerDataset(
         config=config,
@@ -263,9 +266,10 @@ def train(args, logger):
         val=False,
         use_precomp_lang_embed=args.precomp_lang_embed,
         task_name=args.task_name,
+        dataset_name="egodex_" + args.action_mode if args.dataset_name == "egodex" else args.dataset_name,
     )
     
-    val_dataset = VLAConsumerDataset(
+    val_dataset = val_class(
         config=config,
         image_transform=image_transform,
         num_cameras=config["common"]["num_cameras"],
@@ -276,10 +280,12 @@ def train(args, logger):
         val=True,
         use_precomp_lang_embed=args.precomp_lang_embed,
         task_name=args.task_name,
+        dataset_name="egodex_" + args.action_mode if args.dataset_name == "egodex" else args.dataset_name,
     )
 
     # Create data collator for batching
     data_collator = DataCollatorForVLAConsumerDataset(use_precomp_lang_embed=args.precomp_lang_embed)
+    val_data_collator = val_collator_class(use_precomp_lang_embed=args.precomp_lang_embed)
 
     # Create data loaders
     train_dataloader = torch.utils.data.DataLoader(
@@ -296,7 +302,7 @@ def train(args, logger):
         val_dataset,
         batch_size=args.sample_batch_size,
         shuffle=True,
-        collate_fn=data_collator,
+        collate_fn=val_data_collator,
         num_workers=0,
         pin_memory=True,
         persistent_workers=False,
@@ -419,7 +425,7 @@ def train(args, logger):
                     lang_embeds = batch["lang_embeds"].to(dtype=weight_dtype)
                     lang_attn_mask = batch["lang_attn_mask"].to(dtype=weight_dtype)
                 
-                print(batch["lang_embeds"].shape)
+                # print(batch["lang_embeds"].shape)
 
                 # Compute loss
                 loss_dict = hrdt.compute_loss(

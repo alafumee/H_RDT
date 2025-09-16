@@ -14,6 +14,8 @@ from multiprocessing import Process, Queue
 import traceback
 import time
 
+from utils.pose_utils import mat_to_rotvec
+
 
 def construct_48d_action_from_hdf5(transforms_group, frame_idx):
     """
@@ -59,6 +61,111 @@ def construct_48d_action_from_hdf5(transforms_group, frame_idx):
     
     return np.array(action_vector, dtype=np.float32)
 
+def construct_eef_action_from_hdf5(transforms_group, frame_idx):
+    """
+    Construct (6+1)-dimensional end-effector action representation from HDF5 file
+    
+    Args:
+        transforms_group: transforms group in HDF5
+        frame_idx: frame index
+        
+    Returns:
+        action_vector: 14-dimensional action vector (6+1 for left hand, 6+1 for right hand)
+    """
+    action_vector = []
+
+    alert = ''
+    
+    # Fingertip joint name mapping
+    fingertip_joints = {
+        'left': ['leftThumbTip', 'leftIndexFingerTip', 'leftMiddleFingerTip', 
+                'leftRingFingerTip', 'leftLittleFingerTip'],
+        'right': ['rightThumbTip', 'rightIndexFingerTip', 'rightMiddleFingerTip',
+                 'rightRingFingerTip', 'rightLittleFingerTip']
+    }
+
+    for hand_side in ['left', 'right']:
+        hand_key = f"{hand_side}Hand"
+        
+        # Get hand 4x4 transformation matrix
+        hand_transform = transforms_group[hand_key][frame_idx]
+            
+        # 1. Wrist 3D position
+        hand_position = hand_transform[:3, 3]
+        action_vector.extend(hand_position)
+
+        x,y,z = hand_position
+        this_alert = ''
+        if x<-0.6 or x>0.9:
+            this_alert += f'x:{x:.2f} '
+        if y<0.25 or y>2.1:
+            this_alert += f'y:{y:.2f} '
+        if z>0.35:
+            this_alert += f'z:{z:.2f} '
+        if len(this_alert) > 2:
+            alert += f'{hand_side} hand oob: {this_alert}; '
+        
+            
+        # 2. Wrist 6D orientation (first two columns of rotation matrix)
+        euler_angles = mat_to_rotvec(hand_transform)
+        action_vector.extend(euler_angles)
+
+        # 3. Estimate gripper width
+        fingertip_positions = []
+        for fingertip in fingertip_joints[hand_side]:
+            fingertip_transform = transforms_group[fingertip][frame_idx]
+            fingertip_pos = fingertip_transform[:3, 3]
+            fingertip_positions.append(fingertip_pos)
+        
+        if len(fingertip_positions) >= 2:
+            fingertip_positions = np.array(fingertip_positions)
+            gripper_width = np.linalg.norm(fingertip_positions[0] - fingertip_positions[1])
+        else:
+            gripper_width = 0.0
+        action_vector.append(gripper_width)
+            
+    return np.array(action_vector, dtype=np.float32), alert
+
+def construct_eef_rotmat_from_hdf5(transforms_group, frame_idx):
+    action_vector = []
+    
+    # Fingertip joint name mapping
+    fingertip_joints = {
+        'left': ['leftThumbTip', 'leftIndexFingerTip', 'leftMiddleFingerTip', 
+                'leftRingFingerTip', 'leftLittleFingerTip'],
+        'right': ['rightThumbTip', 'rightIndexFingerTip', 'rightMiddleFingerTip',
+                 'rightRingFingerTip', 'rightLittleFingerTip']
+    }
+    
+    for hand_side in ['left', 'right']:
+        hand_key = f"{hand_side}Hand"
+        
+        # Get hand 4x4 transformation matrix
+        hand_transform = transforms_group[hand_key][frame_idx]
+            
+        # 1. Wrist 3D position
+        hand_position = hand_transform[:3, 3]
+        action_vector.extend(hand_position)
+
+        # 2. Wrist 6D orientation (first two columns of rotation matrix)
+        rotation_matrix = hand_transform[:3, :3]
+        rotation_6d = np.concatenate([rotation_matrix[:, 0], rotation_matrix[:, 1]])
+        action_vector.extend(rotation_6d)
+
+        # 3. Estimate gripper width
+        fingertip_positions = []
+        for fingertip in fingertip_joints[hand_side]:
+            fingertip_transform = transforms_group[fingertip][frame_idx]
+            fingertip_pos = fingertip_transform[:3, 3]
+            fingertip_positions.append(fingertip_pos)
+        if len(fingertip_positions) >= 2:
+            fingertip_positions = np.array(fingertip_positions)
+            gripper_width = np.linalg.norm(fingertip_positions[0] - fingertip_positions[1])
+        else:
+            gripper_width = 0.0
+        action_vector.append(gripper_width)
+
+    return np.array(action_vector, dtype=np.float32)
 
 def process_single_file(hdf5_path, force_overwrite=False):
     """
@@ -86,6 +193,7 @@ def process_single_file(hdf5_path, force_overwrite=False):
                         print(f"Warning: {hdf5_path} has incomplete actions_48d ({actual_frames}/{expected_frames}), will regenerate")
                 else:
                     return False, "Missing transforms data", 0
+                
         
         # Read data and compute 48-dimensional actions
         with h5py.File(hdf5_path, 'r') as f:
@@ -134,6 +242,151 @@ def process_single_file(hdf5_path, force_overwrite=False):
         
     except Exception as e:
         return False, str(e), 0
+    
+def process_single_file_eef(hdf5_path, force_overwrite=False):
+    """
+    Process single HDF5 file, add 14-dimensional eef action data
+    
+    Args:
+        hdf5_path: HDF5 file path
+        force_overwrite: Whether to force overwrite existing actions_48d data
+        
+    Returns:
+        (success, error_message, total_frames)
+    """
+    try:
+        # First check if file already has actions_eef
+        with h5py.File(hdf5_path, 'r') as f:
+            if 'actions_eef' in f and not force_overwrite:
+                # Check data integrity
+                if 'transforms' in f:
+                    transforms_group = f['transforms']
+                    expected_frames = list(transforms_group.values())[0].shape[0]
+                    actual_frames = f['actions_eef'].shape[0]
+                    if actual_frames == expected_frames:
+                        return True, "Already exists and complete", actual_frames
+                    else:
+                        print(f"Warning: {hdf5_path} has incomplete actions_eef ({actual_frames}/{expected_frames}), will regenerate")
+                else:
+                    return False, "Missing transforms data", 0
+                
+        
+        # Read data and compute 14-dimensional eef actions
+        with h5py.File(hdf5_path, 'r') as f:
+            if "transforms" not in f:
+                return False, "Missing transforms data", 0
+                
+            transforms_group = f['transforms']
+            total_frames = list(transforms_group.values())[0].shape[0]
+            
+            # Construct 14-dimensional eef action data for all frames
+            actions_eef = []
+            for frame_idx in range(total_frames):
+                try:
+                    action_vector, alert = construct_eef_action_from_hdf5(transforms_group, frame_idx)
+                    actions_eef.append(action_vector)
+                    if len(alert) > 2:
+                        print(f"Alert in {hdf5_path} frame {frame_idx}: {alert}", flush=True)
+                except Exception as e:
+                    print(f"Error processing frame {frame_idx} in {hdf5_path}: {e}")
+            
+            if not actions_eef:
+                return False, "No valid frames processed", 0
+            
+            actions_array = np.array(actions_eef)
+        
+        # Write 14-dimensional eef action data to file
+        with h5py.File(hdf5_path, 'a') as f:
+            # Delete old actions_48d data (if exists)
+            if 'actions_eef' in f:
+                del f['actions_eef']
+            
+            # Create new actions_48d dataset
+            f.create_dataset(
+                'actions_eef', 
+                data=actions_array,
+                compression='gzip',
+                compression_opts=9
+            )
+            
+            # Add metadata
+            f['actions_eef'].attrs['description'] = '14-dimensional eef hand action representation'
+            f['actions_eef'].attrs['format'] = 'left_hand(7d) + right_hand(7d)'
+            f['actions_eef'].attrs['hand_format'] = 'position(3d) + rotation_euler_angles(3d) + pinch(1d)'
+            f['actions_eef'].attrs['created_by'] = 'precompute_48d_actions.py'
+            f['actions_eef'].attrs['created_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        return True, "Success", total_frames
+        
+    except Exception as e:
+        return False, str(e), 0
+    
+def process_single_file_eef_rotmat(hdf5_path, force_overwrite=False):
+    """
+    Process single HDF5 file, add 14-dimensional eef action data with rotation matrix
+    """
+    try:
+        # First check if file already has actions_eef_rotmat
+        with h5py.File(hdf5_path, 'r') as f:
+            if 'actions_eef_rotmat' in f and not force_overwrite:
+                # Check data integrity
+                if 'transforms' in f:
+                    transforms_group = f['transforms']
+                    expected_frames = list(transforms_group.values())[0].shape[0]
+                    actual_frames = f['actions_eef_rotmat'].shape[0]
+                    if actual_frames == expected_frames:
+                        return True, "Already exists and complete", actual_frames
+                    else:
+                        print(f"Warning: {hdf5_path} has incomplete actions_eef_rotmat ({actual_frames}/{expected_frames}), will regenerate")
+                else:
+                    return False, "Missing transforms data", 0
+                
+        
+        # Read data and compute 14-dimensional eef actions
+        with h5py.File(hdf5_path, 'r') as f:
+            if "transforms" not in f:
+                return False, "Missing transforms data", 0
+                
+            transforms_group = f['transforms']
+            total_frames = list(transforms_group.values())[0].shape[0]
+            
+            # Construct 14-dimensional eef action data for all frames
+            actions_eef = []
+            for frame_idx in range(total_frames):
+                try:
+                    action_vector = construct_eef_rotmat_from_hdf5(transforms_group, frame_idx)
+                    actions_eef.append(action_vector)
+                except Exception as e:
+                    print(f"Error processing frame {frame_idx} in {hdf5_path}: {e}")
+            
+            if not actions_eef:
+                return False, "No valid frames processed", 0
+            
+            actions_array = np.array(actions_eef)
+        
+        # Write 14-dimensional eef action data to file
+        with h5py.File(hdf5_path, 'a') as f:
+            # Delete old actions_48d data (if exists)
+            if 'actions_eef_rotmat' in f:
+                del f['actions_eef_rotmat']
+            
+            # Create new actions_48d dataset
+            f.create_dataset(
+                'actions_eef_rotmat', 
+                data=actions_array,
+                compression='gzip',
+                compression_opts=9
+            )
+            # Add metadata
+            f['actions_eef_rotmat'].attrs['description'] = '20-dimensional eef hand action representation with rotation matrix'
+            f['actions_eef_rotmat'].attrs['format'] = 'left_hand(10d) + right_hand(10d)'
+            f['actions_eef_rotmat'].attrs['hand_format'] = 'position(3d) + rotation_6d(6d) + pinch(1d)'
+            f['actions_eef_rotmat'].attrs['created_by'] = 'precompute_48d_actions.py'
+            f['actions_eef_rotmat'].attrs['created_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
+        return True, "Success", total_frames
+        
+    except Exception as e:
+        return False, str(e), 0
 
 
 def worker_process(process_id, file_list, progress_queue, force_overwrite):
@@ -147,7 +400,7 @@ def worker_process(process_id, file_list, progress_queue, force_overwrite):
         total_frames_processed = 0
         
         for file_path in file_list:
-            success, message, frames = process_single_file(file_path, force_overwrite)
+            success, message, frames = process_single_file_eef_rotmat(file_path, force_overwrite)
             
             if success:
                 if "Already exists" in message:

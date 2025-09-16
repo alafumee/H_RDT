@@ -310,6 +310,28 @@ def parse_args(input_args=None):
         help="Task name for RobotwinAgilexDataset (e.g., 'open_laptop', 'close_laptop', etc.)"
     )
 
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="egodex",
+        help="Dataset name: 'egodex', 'robotwin_agilex'"
+    )
+
+    parser.add_argument(
+        "--action_mode",
+        type=str,
+        default="48d",
+        help="Action representation mode for EgoDexDataset: '48d' (48-dimensional), 'eef' (end-effector 14-dimensional), 'eef_rotmat' (end-effector with rotation matrix)"
+    )
+
+    parser.add_argument(
+        "--visualize_during_training",
+        action="store_true",
+        default=False,
+        help="Whether or not to visualize the model's predictions during training.",
+    )
+
+
     if input_args is not None:
         args = parser.parse_args(input_args)
     else:
