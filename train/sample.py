@@ -92,6 +92,7 @@ def log_sample_res(
         
         # Get ground truth actions for evaluation
         actions = batch["actions"].to(weight_dtype)
+        unnormalized_actions = batch["unnormalized_actions"].to(torch.float32)
         action_norm = batch["action_norm"].to(weight_dtype)
         dataset_indices = batch["data_indices"]
         
@@ -106,14 +107,16 @@ def log_sample_res(
         if visualize and accelerator.is_main_process:
 
             now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            desc_str = batch['metadata'][0]
 
             if args.action_mode == '48d':
 
                 # left hand
 
                 scaled_pred_actions = (pred_actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
-                scaled_gt_actions = (actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
-
+                # scaled_gt_actions = (actions.cpu().to(torch.float32).numpy() + 1) / 2 * (action_max - action_min) + action_min
+                scaled_gt_actions = unnormalized_actions.cpu().to(torch.float32).numpy()
+                
                 print("gt 48d action:", scaled_gt_actions[0, :, :9])
                 # comment this for pred
                 # scaled_pred_actions = scaled_gt_actions.copy()
@@ -175,7 +178,7 @@ def log_sample_res(
                 renderer.consume_data(gt_eef_pos=scaled_gt_actions[0, :, :3], gt_eef_rot=rot_mat,
                                     gt_eef2_pos=scaled_gt_actions[0, :, 24:27], gt_eef2_rot=rot_mat_right)
                 
-                renderer.run(output_path=f'/home/yz12129/hrdt_vis/sample_vis/48d_{now_time}_pred.avi')
+                renderer.run(output_path=f'/home/yz12129/hrdt_vis/sample_vis/48d_{now_time}_pred_{desc_str}.avi')
             
             elif args.action_mode == 'eef_rotmat':
 

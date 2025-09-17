@@ -101,7 +101,7 @@ class EgoDexDataset:
                 if part_dir.exists():
                     data_files.extend(self._scan_directory(part_dir))
         else:
-            # Test set: test
+            # Test set: test # we may change it to part1 for visulization
             test_dir = self.data_root / 'test'
             if test_dir.exists():
                 data_files.extend(self._scan_directory(test_dir))
@@ -246,9 +246,9 @@ class EgoDexDataset:
             else:
                 # if horizon < 0, we want to sample future frames for visualization
                 # also, the original code seems to read frame idx-2 and predict actions from idx and after??
-                # so we honor that choice here, read images starting from idx
-                end_i = idx - horizon # force upsample_rate=1
-                for i, frame_idx in enumerate(range(idx, end_i)):
+                # here, we read images starting from idx + 1 to match action indices
+                end_i = idx - horizon * self.upsample_rate
+                for i, frame_idx in enumerate(range(idx + 1, end_i + 1, self.upsample_rate)):
                     if frame_idx < total_frames:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                         ret, frame = cap.read()
@@ -300,7 +300,7 @@ class EgoDexDataset:
         intrinsics = camera_group['intrinsic'][:]
         intrinsics = np.tile(intrinsics, (chunk_size, 1, 1))
         transforms_group = hdf5_file['transforms']
-        extrinsics = transforms_group['camera'][frame_idx:frame_idx + chunk_size]
+        extrinsics = transforms_group['camera'][frame_idx + 1:frame_idx + chunk_size * self.upsample_rate + 1:self.upsample_rate]
         if extrinsics.shape[0] < chunk_size:
             last_extrinsic = extrinsics[-1:] if extrinsics.shape[0] > 0 else np.eye(4)[None, ...]
             padding = np.repeat(last_extrinsic, chunk_size - extrinsics.shape[0], axis=0)
@@ -401,8 +401,8 @@ class EgoDexDataset:
                 'current_images_mask': [np.ones(self.img_history_size, dtype=bool)],  # Image mask
                 'instruction': str(lang_embed_path),  # Language embedding file path
                 'dataset_name': self.DATASET_NAME,
-                'intrinsics': intrinsics,  # (3, 3)
-                'extrinsics': extrinsics,  # (4, 4)
+                'intrinsics': intrinsics,  # (chunk_size, 3, 3)
+                'extrinsics': extrinsics,  # (chunk_size, 4, 4)
                 'task': file_info['task'],
                 'file_info': {
                     'hdf5_path': str(file_info['hdf5']),

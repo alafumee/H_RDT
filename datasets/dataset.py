@@ -140,6 +140,8 @@ class VLAVisualizeDataset(Dataset):
         data_dict['dataset_name'] = res['dataset_name']
         data_dict['data_idx'] = self.dataset_name2id[data_dict['dataset_name']]
 
+        data_dict['metadata'] = res['file_info']['hdf5_path'].replace("/", "-").strip('.hdf5').strip('-') + '_index_' + str(res['file_info']['selected_index'])
+
         # Process state and action data
         data_dict["states"] = res['states']
         data_dict["actions"] = res['actions']
@@ -555,6 +557,7 @@ class DataCollatorForVLAVisualizeDataset(object):
             "intrinsics": [],
             "extrinsics": [],
             "original_images": [],
+            "metadata": [],
         }
         
         if self.use_precomp_lang_embed:
@@ -568,7 +571,7 @@ class DataCollatorForVLAVisualizeDataset(object):
                 'states', 'actions',
                 'action_norm',
                 'unnormalized_actions',
-                'original_images',
+                # 'original_images',
                 'intrinsics',
                 'extrinsics',
             ]
@@ -584,6 +587,8 @@ class DataCollatorForVLAVisualizeDataset(object):
             # Process images
             batch["images"].append(instance["images"])
             batch["data_indices"].append(instance["data_idx"])
+            batch["original_images"].append(instance["original_images"])
+            batch["metadata"].append(instance["metadata"])
 
             # batch["intrinsics"].append(instance["intrinsics"])
             # batch["extrinsics"].append(instance["extrinsics"])
@@ -599,7 +604,7 @@ class DataCollatorForVLAVisualizeDataset(object):
             'states', 'actions',
             'action_norm',
             'unnormalized_actions',
-            'original_images',
+            # 'original_images',
             'intrinsics',
             'extrinsics',
         ]
